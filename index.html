@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>فاتورة مبيعات</title> <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    :root{
+      --primary:#0b78b7;
+      --accent:#023e8a;
+      --muted:#6b7280;
+      --card-bg:#fff;
+      --bg:#f3f6fb;
+      --success:#2dce89;
+    }
+    html,body{height:100%;margin:0;font-family:Tahoma,Arial,sans-serif;background:var(--bg);color:#222}
+    .wrap{
+        max-width:1100px;
+        margin:28px auto; 
+        padding:22px;
+        border-radius:12px;
+        background:linear-gradient(180deg,#ffffff 0%, #fbfdff 100%);
+        box-shadow:0 10px 35px rgba(9, 30, 66, 0.09); 
+        transition: box-shadow 0.3s ease; 
+        position: relative; 
+        overflow: hidden; 
+    }
+    header{
+        display: block; 
+        text-align: center;
+        margin-bottom:20px;
+    }
+    header h1{
+        margin:0 auto; 
+        font-size:24px; 
+        color:var(--primary);
+        padding-bottom: 10px; 
+    }
+    .controls{display:flex;gap:10px;align-items:center}
+    .controls input[type="text"]{padding:10px 12px;border-radius:8px;border:2px solid #dbeafe;width:320px;font-size:15px;direction:ltr}
+    .controls .small{padding:8px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#fff}
+    /* suggestions */
+    .suggestions{position:relative}
+    #suggestList{position:absolute;right:0;left:0;top:44px;background:#fff;border-radius:8px;box-shadow:0 6px 20px rgba(16,24,40,0.08);z-index:1000;max-height:240px;overflow:auto;border:1px solid #e6eef8}
+    #suggestList div{padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9}
+    #suggestList div:hover{background:#e6f2ff}
+    /* invoice table */
+    .invoice-area{
+        margin-top:18px;
+    }
+    table{
+        width:100%;
+        border-collapse:collapse;
+        background:var(--card-bg);
+        border-radius:8px;
+        overflow:hidden; 
+    }
+    thead th{
+        background:var(--primary);
+        color:#fff;
+        padding:12px;
+        text-align:center;
+        font-weight:600;
+        border-bottom: 2px solid var(--accent); 
+    }
+    tbody td{
+        padding:10px;
+        text-align:center;
+        border-bottom:1px solid #f1f5f9;
+        white-space: nowrap; 
+    }
+    tbody tr:hover { 
+        background: #f7fcff; 
+        transition: background 0.2s;
+    }
+    tfoot td{
+        padding:12px;
+        text-align:center;
+        font-weight:700;
+        background:#f8fafc;
+        white-space: nowrap;
+    }
+    
+    /* ضبط عروض الأعمدة المخصصة (لشاشات الكمبيوتر والتابلت) */
+    .invoice-area [data-col="name"] { width: 40%; max-width: 400px; text-align: right; }
+    .invoice-area [data-col="code"] { width: 10%; max-width: 100px; }
+    .invoice-area [data-col="qty"] { width: 8%; max-width: 60px; }
+    .invoice-area [data-col="sell"], .invoice-area [data-col="buy"] { width: 10%; max-width: 100px; font-size: 14px; } 
+    .invoice-area [data-col="sumSell"], .invoice-area [data-col="sumBuy"] { width: 10%; max-width: 100px; } 
+    .invoice-area [data-col="idx"] { width: 4%; max-width: 30px; }
+    .invoice-area [data-col="actions"] { width: 8%; max-width: 80px; }
+
+    /* مدخلات الكمية والسعر في الجدول */
+    .qty-input{
+        width:70px;
+        padding:6px;
+        border-radius:6px;
+        border:1px solid #d1d5db;
+        text-align:center;
+        box-sizing: border-box; 
+    }
+    .price-input {
+        width: 90px; 
+        padding: 6px;
+        border-radius: 6px;
+        border: 1px solid #d1d5db;
+        text-align: center;
+        box-sizing: border-box;
+    }
+
+    .btn{
+        padding:10px 14px;
+        border-radius:8px;
+        border:0;
+        background:var(--primary);
+        color:#fff;
+        cursor:pointer;
+        font-weight:600;
+        transition: all 0.2s ease;
+    }
+    .btn:hover {
+        box-shadow: 0 4px 12px rgba(11, 120, 183, 0.4);
+        transform: translateY(-1px);
+    }
+    .btn.ghost{background:#fff;color:var(--primary);border:1px solid var(--primary)}
+    .btn.ghost:hover {
+        box-shadow: none; 
+        background: #f1f8ff; 
+        transform: none;
+    }
+    .right-actions{display:flex;gap:10px;align-items:center}
+    .totals-row{background:#e6f2ff}
+    .remove-btn{background:#ff6b6b;color:#fff;padding:6px 8px;border-radius:6px;border:0;cursor:pointer}
+    /* invoice header meta and info */
+    .invoice-header-meta {display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;}
+    .invoice-header-meta img {max-width: 150px; height: auto; margin-left: 20px; display: block;}
+    .invoice-info {display: flex; flex-direction: column; gap: 8px;}
+    .invoice-info div {
+        font-size: 14px; 
+        display: flex; 
+        align-items: center; 
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .invoice-info label {
+        flex-shrink: 0; 
+    }
+    /* NEW: تصغير الحجم وجعله بجوار العنوان */
+    .invoice-info input {
+        padding: 6px 10px; 
+        border-radius: 6px; 
+        border: 1px solid #cbd5e1; 
+        width: 100px; /* حجم أصغر */
+        max-width: 150px; /* أقصى حجم أصغر */
+        text-align: right;
+    } 
+    .column-toggle {display:flex;gap:10px;align-items:center;}
+    .hidden {display:none !important;}
+    .totals-bar {
+      margin-top: 12px;
+      display: flex;
+      justify-content: space-around;
+      gap: 12px;
+      align-items: center;
+      padding: 10px;
+      background: #f8fafc;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+      border: 1px solid #eef2ff;
+    }
+    .totals-bar .small-card {
+      background: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      min-width: 160px;
+      text-align: center;
+      border: 1px solid #eef2ff;
+      flex-grow: 1;
+    }
+    
+    .hide-on-capture {
+        display: none !important;
+    }
+    .totals-row .grand-total-label {
+        background: var(--primary); 
+        color: #fff; 
+        font-weight: 700;
+    }
+    بالتأكيد. لتغيير مكان الختم ورفعه إلى الأعلى، نحتاج إلى تعديل خاصية bottom في CSS.
+
+لقد قمت بزيادة قيمة bottom من 100px إلى 200px لرفع الختم فوق رسالة الإغلاق (التي تبدأ على ارتفاع حوالي 50 بكسل من الأسفل) وضمان ظهوره في مكان أعلى داخل الفاتورة.
+
+💻 ملف index.html بعد تعديل مكان الختم
+تم تطبيق التعديل في جزء <style>:
+
+CSS
+
+    /* ... (CSS السابق) ... */
+    .hide-on-capture {
+        display: none !important;
+    }
+    .totals-row .grand-total-label {
+        background: var(--primary); 
+        color: #fff; 
+        font-weight: 700;
+    }
+    #companyStamp {
+        position: absolute;
+        bottom: 100px; /* تم التعديل هنا: تم رفعه إلى 200 بكسل من الأسفل */
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: 180px; 
+        height: auto;
+        opacity: 0.5; 
+        z-index: 5;
+    }
+    }
+    .closing-message {
+        text-align: center;
+        margin-top: 30px;
+        padding-top: 15px;
+        font-size: 14px;
+        color: var(--primary);
+        font-weight: 600;
+        border-top: 1px dashed #ddd; 
+    }
+
+    /* responsive (أقل من 880 بكسل) */
+    @media (max-width:880px){
+      .controls{flex-direction:column;align-items:stretch}
+      .controls input[type="text"]{width:100%}
+      .invoice-header-meta {flex-direction: column; align-items: center; text-align: center;}
+      .invoice-header-meta img {margin-bottom: 15px; margin-left: 0;}
+      .totals-bar {flex-direction: column; gap: 8px;}
+      .totals-bar .small-card {min-width: 100%;}
+      .controls > div:last-child {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+
+    /* تحسينات الاستجابة لشاشات الموبايل الصغيرة جداً (أقل من 600 بكسل) */
+    @media (max-width: 600px) {
+        .wrap {
+            padding: 10px;
+            margin: 10px auto;
+        }
+        /* تقييد عرض حاوية بيانات الفاتورة وتوسيطها */
+        .invoice-info {
+            max-width: 300px; 
+            width: 100%; 
+            margin: 0 auto; 
+        }
+        
+        /* تقليص حاد للحشو وحجم الخط للجدول لضمان الملائمة */
+        thead th, tbody td, tfoot td {
+            padding: 4px; 
+            font-size: 11px; 
+        }
+        .qty-input {
+            width: 30px; 
+            padding: 2px;
+            font-size: 11px;
+        }
+        .price-input {
+            width: 50px; 
+            padding: 2px;
+            font-size: 11px;
+        }
+        .remove-btn {
+            padding: 2px 4px; 
+        }
+        
+        /* عروض الأعمدة المضغوطة جداً لضمان الملائمة (تم زيادة عرض اسم الصنف) */
+        .invoice-area [data-col="idx"] { width: 4%; }
+        .invoice-area [data-col="code"] { width: 6%; } /* تم تقليلها */
+        .invoice-area [data-col="name"] { width: 35%; text-align: right; } /* تم زيادتها */
+        .invoice-area [data-col="qty"] { width: 4%; } /* تم تقليلها */
+        .invoice-area [data-col="buy"] { width: 7%; } /* تم تقليلها */
+        .invoice-area [data-col="sell"] { width: 7%; } /* تم تقليلها */
+        .invoice-area [data-col="sumBuy"] { width: 14%; } /* تم تقليلها */
+        .invoice-area [data-col="sumSell"] { width: 14%; } /* تم تقليلها */
+        .invoice-area [data-col="actions"] { width: 8%; }
+        
+        /* تحسين شكل الأزرار (Buttons) */
+        .btn, .btn.ghost, .column-toggle select {
+            padding: 6px 8px; 
+            font-size: 12px; 
+            min-width: 80px; 
+            flex-grow: 1; 
+        }
+        .controls > div:last-child {
+            justify-content: space-between;
+        }
+        
+        /* حذف التعديلات التي كانت تجعل حقول الإدخال أسفل العناوين في الموبايل */
+        /* الآن، ستظل العناوين وحقول الإدخال بجوار بعضهما البعض بقدر الإمكان */
+        .invoice-info div {
+             align-items: center; /* تجميع العناصر في المنتصف */
+             flex-wrap: wrap;
+        }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    
+    <header style="display: block; text-align: center;">
+      <h1 id="mainTitle" style="margin: 0 auto; font-size: 24px; color: var(--primary); padding-bottom: 10px;">فاتورة مبيعات</h1>
+    </header>
+
+    <div class="invoice-header-meta">
+        <img src="logo.jpg" alt="Good-Light " id="companyLogo" /> <div class="invoice-info">
+            <div><label>اسم العميل:</label> <input type="text" id="clientNameInput" placeholder="اكتب اسم العميل" /></div>
+            <div><label>رقم الفاتورة:</label> <input type="text" id="invoiceNumberInput" placeholder="رقم الفاتورة" /></div>
+            <div><label>التاريخ:</label> <input type="text" id="invoiceDateInput" placeholder="تاريخ الفاتورة" /></div>
+        </div>
+    </div>
+
+    <div style="margin-top:14px; flex-wrap: wrap;" class="controls">
+      <div class="suggestions" style="flex:1;position:relative">
+        <input id="searchInput" type="text" placeholder="اكتب اسم المنتج أو الكود..." autocomplete="off" />
+        <div id="suggestList" style="display:none"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center; margin-top: 10px; flex-wrap: wrap;">
+        
+        <select id="invoiceTypeSelect" class="btn ghost" style="width: auto; min-width: 150px; text-align: center; padding: 9px 12px; height: 40px;">
+            <option value="مبيعات" selected>فاتورة مبيعات</option>
+            <option value="مشتريات">فاتورة مشتريات</option>
+            <option value="عرض سعر">عرض سعر</option>
+        </select>
+        
+        <button id="addManual" class="btn ghost">إضافة يدوي</button>
+        <button id="clearInvoice" class="btn ghost">مسح الفاتورة</button>
+        <button id="toggleBuyColumnsBtn" class="btn ghost">إخفاء/إظهار سعر الشراء</button>
+        <button id="toggleStampBtn" class="btn ghost">ختم الفاتورة</button> <div class="column-toggle">
+            <select id="columnSelect" class="small" title="اختر عمودًا للإخفاء/الإظهار">
+                </select>
+            <button id="toggleColumnBtn" class="btn ghost">إخفاء/إظهار</button>
+        </div>
+        <button id="downloadImg" class="btn">تحميل صورة</button>
+        <button id="downloadPdf" class="btn">تحميل PDF</button>
+      </div>
+    </div>
+
+    <div class="invoice-area">
+      <table id="invoiceTable" aria-label="invoice">
+        <thead>
+          <tr id="tableHeaders">
+            <th data-col="idx">م</th>
+            <th data-col="code"> الكود</th>
+            <th data-col="name">اسم الصنف</th>
+            <th data-col="qty">الكمية</th>
+            <th data-col="buy">سعر الشراء</th>
+            <th data-col="sell">سعر البيع</th>
+            <th data-col="sumBuy">مجموع الشراء</th>
+            <th data-col="sumSell">مجموع البيع</th>
+            <th data-col="actions">إجراءات</th> </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+          <tr class="totals-row">
+            <td colspan="3" class="grand-total-label">الإجمالي</td> 
+            <td id="totalQty">0</td>
+            <td id="totalBuy">0</td>
+            <td id="totalSell">0</td>
+            <td id="grandBuy">0</td>
+            <td id="grandSell">0</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    
+    <div class="totals-bar">
+      <div class="small-card">عدد البنود: <span id="itemsCount">0</span></div>
+      <div class="small-card">إجمالي تكلفة الشراء : <strong id="displayGrandBuy">0</strong></div>
+      <div class="small-card">إجمالي سعر البيع : <strong id="displayGrandSell">0</strong></div>
+    </div>
+
+    <img id="companyStamp" src="stamp.png" alt="ختم الشركة" class="hidden" />
+
+    <div class="closing-message">
+        نشكركم على ثقتكم الغالية ونتطلع لخدمتكم مجدداً.
+    </div>
+
+  </div>
+
+<script>
+/*
+  ملف الإكسيل يجب أن يحتوي رؤوس أعمدة بما يشبه:
+  الاسم    الكود    الوحدة    عدد القطع    سعر الشراء    سعر البيع    الرصيد
+  الكود أعلاه سيتم تطبيعهم (normalize) حتى يتعامل الكود مع اختلاف المسافات/حروف.
+*/
+
+let products = []; // مصفوفة المنتجات من الإكسيل
+let invoiceCounter = 1;
+const EXCEL_FILENAME = "products.Xls"; // اسم الملف ثابت كما طلب المستخدم
+
+// مسميات الأعمدة المتوقعة (نقوم بتطبيع الاسماء عند القراءة)
+const expectedKeys = {
+  name: ["الاسم","name","product","اسم المنتج"],
+  code: ["الكود","كود المنتج","code","barcode"],
+  // تم حذف "unit" من expectedKeys
+  qty: ["عدد القطع","quantity","qty","الكمية"],
+  buy: ["سعر الشراء","سعر_الشراء","purchase price","buy"],
+  sell: ["سعر البيع","سعر_البيع","sell price","sell"],
+  balance: ["الرصيد","رصيد","balance"]
+};
+
+// تعريف الأعمدة القابلة للإخفاء/الإظهار
+const columnHeaders = [
+    { key: "idx", text: "م" },
+    { key: "code", text: "كود الصنف" },
+    { key: "name", text: "اسم الصنف" },
+    // تم حذف عمود "unit"
+    { key: "qty", text: "الكمية" },
+    { key: "buy", text: "سعر الشراء" },
+    { key: "sell", text: "سعر البيع" },
+    { key: "sumBuy", text: "المجموع شراء" },
+    { key: "sumSell", text: "المجموع بيع" },
+    { key: "actions", text: "إجراءات" },
+];
+
+// NEW ELEMENTS
+const mainTitle = document.getElementById('mainTitle');
+const invoiceTypeSelect = document.getElementById('invoiceTypeSelect');
+
+
+function normKey(s){
+  if(!s && s!==0) return "";
+  return String(s).toLowerCase().replace(/\s+/g,'').replace(/أ|إ|آ/g,'ا').replace(/[^ا-ي0-9a-z]/g,'');
+}
+
+function mapHeaders(headers){
+  // headers: array of raw header strings
+  const map = {};
+  headers.forEach((h, i) => {
+    const n = normKey(h);
+    for(const [k,variants] of Object.entries(expectedKeys)){
+      for(const v of variants){
+        if(n === normKey(v)){
+          map[k] = {index:i, raw: h};
+        }
+      }
+    }
+  });
+  return map;
+}
+
+async function loadExcel(filename){
+  console.log("تحميل الملف:", filename);
+  try{
+    const res = await fetch(filename);
+    console.log("حالة الاستجابة:", res.status);
+    if(!res.ok) throw new Error('fetch failed '+res.status);
+    const arr = await res.arrayBuffer();
+    // read workbook
+    const workbook = XLSX.read(new Uint8Array(arr), {type:'array'});
+    console.log("شيتات الملف:", workbook.SheetNames);
+    const ws = workbook.Sheets[workbook.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(ws, {header:1});
+    if(raw.length === 0) { alert('الملف فارغ'); return; }
+
+    const headers = raw[0];
+    const headerMap = mapHeaders(headers);
+
+    // Build products array
+    products = [];
+    for(let r=1;r<raw.length;r++){
+      const row = raw[r];
+      if(row.every(c => c===undefined || c===null || String(c).trim()==="")) continue;
+      const p = {};
+      // try to set fields by headerMap; fallback to generic columns
+      if(headerMap.name) p.name = row[headerMap.name.index];
+      if(headerMap.code) p.code = row[headerMap.code.index];
+      // تم حذف 'unit'
+      if(headerMap.qty) p.qty = row[headerMap.qty.index];
+      if(headerMap.buy) p.buy = row[headerMap.buy.index];
+      if(headerMap.sell) p.sell = row[headerMap.sell.index];
+      if(headerMap.balance) p.balance = row[headerMap.balance.index];
+
+      // fallback heuristics: if some key missing, try to guess by column order
+      // (only for robustness)
+      if(!p.name && headers[1]) p.name = row[0];
+      if(!p.code && headers[1]) p.code = row[1] || '';
+      // normalize numbers
+      p.buy = Number(p.buy || 0);
+      p.sell = Number(p.sell || 0);
+      p.qty = Number(p.qty || p['عدد القطع'] || 0);
+
+      // ensure name/code exist
+      if(p.name || p.code) products.push(p);
+    }
+
+    console.log("المنتجات المحمّلة:", products.length);
+    // fill datalist / suggestions
+    buildSuggestionsIndex();
+
+    alert('✅ تم تحميل ملف الإكسيل بنجاح ('+filename+')\nعدد المنتجات: '+products.length);
+  } catch(err){
+    console.error(err);
+    alert('خطأ في تحميل الملف. تأكد من اسم الملف ومساره داخل مجلد السيرفر.\n'+err.message);
+  }
+}
+
+// suggestions index + UI
+const searchInput = document.getElementById('searchInput');
+const suggestList = document.getElementById('suggestList');
+
+let debounceTimer = null;
+searchInput.addEventListener('input', (e)=>{
+  const q = e.target.value.trim();
+  if(debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(()=>showSuggestions(q), 180);
+});
+
+function buildSuggestionsIndex(){
+  // nothing fancy here; products array already has data
+  // for now keep products as-is
+}
+
+function showSuggestions(q){
+  suggestList.innerHTML = '';
+  if(!q){ suggestList.style.display='none'; return; }
+  const qn = q.toLowerCase();
+  const matches = products.filter(p=>{
+    const name = String(p.name||'').toLowerCase();
+    const code = String(p.code||'').toLowerCase();
+    return name.includes(qn) || code.includes(qn);
+  }).slice(0,18);
+
+  if(matches.length === 0){ suggestList.style.display='none'; return; }
+  matches.forEach(m=>{
+    // تم حذف عرض 'unit' من قائمة المقترحات
+    const div = document.createElement('div');
+    div.textContent = `${m.name||''} — ${m.code||''} | رصيد:${m.balance||0}`;
+    div.onclick = ()=>{ addProductToInvoice(m); suggestList.style.display='none'; searchInput.value=''; };
+    suggestList.appendChild(div);
+  });
+  suggestList.style.display = 'block';
+}
+
+// invoice operations
+const tbody = document.querySelector('#invoiceTable tbody');
+function addProductToInvoice(prod){
+  const tr = document.createElement('tr');
+
+  const qty = prod.qty && prod.qty>0 ? prod.qty : 1;
+  const buy = Number(prod.buy || 0);
+  const sell = Number(prod.sell || 0);
+
+  tr.innerHTML = `
+    <td class="idx" data-col="idx">${invoiceCounter}</td>
+    <td class="code" data-col="code">${escapeHtml(prod.code||'')}</td>
+    <td class="pname" data-col="name">${escapeHtml(prod.name||'')}</td>
+    <td data-col="qty"><input class="qty-input" type="number" min="0" value="${qty}"></td>
+    <td class="buy" data-col="buy"><input class="price-input" type="number" min="0" value="${buy}"></td>
+    <td class="sell" data-col="sell"><input class="price-input" type="number" min="0" value="${sell}"></td>
+    <td class="sumBuy" data-col="sumBuy">${formatNumber(buy * qty)}</td>
+    <td class="sumSell" data-col="sumSell">${formatNumber(sell * qty)}</td>
+    <td data-col="actions"><button class="remove-btn">حذف</button></td>
+  `;
+  // events
+  const qtyInput = tr.querySelector('.qty-input');
+  const buyInput = tr.querySelector('.buy .price-input');
+  const sellInput = tr.querySelector('.sell .price-input');
+
+  qtyInput.addEventListener('input', ()=>{ updateRowTotals(tr); updateTotals(); });
+  buyInput.addEventListener('input', ()=>{ updateRowTotals(tr); updateTotals(); });
+  sellInput.addEventListener('input', ()=>{ updateRowTotals(tr); updateTotals(); });
+  
+  tr.querySelector('.remove-btn').addEventListener('click', ()=>{ tr.remove(); renumber(); updateTotals(); updateColumnVisibility(); }); // تحديث الإظهار/الإخفاء للصفوف الجديدة
+
+  tbody.appendChild(tr);
+  invoiceCounter++;
+  renumber();
+  updateTotals();
+  updateColumnVisibility(); // تحديث الإظهار/الإخفاء للصفوف الجديدة
+  document.getElementById('itemsCount').textContent = tbody.querySelectorAll('tr').length;
+}
+
+function addManualRow(){
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td class="idx" data-col="idx">${invoiceCounter}</td>
+    <td class="code" data-col="code"></td>
+    <td class="pname" data-col="name"><input style="width:100%;padding:6px;border-radius:6px;border:1px solid #e6eef8"></td>
+    <td data-col="qty"><input class="qty-input" type="number" min="0" value="1"></td>
+    <td data-col="buy"><input class="price-input" type="number" min="0"></td>
+    <td data-col="sell"><input class="price-input" type="number" min="0"></td>
+    <td class="sumBuy" data-col="sumBuy">0</td>
+    <td class="sumSell" data-col="sumSell">0</td>
+    <td data-col="actions"><button class="remove-btn">حذف</button></td>
+  `;
+  const qtyInput = tr.querySelector('.qty-input');
+  const nameInput = tr.querySelector('.pname input');
+  const buyInput = tr.querySelector('.buy .price-input');
+  const sellInput = tr.querySelector('.sell .price-input');
+
+  function onChange(){
+    // parse values
+    const q = Number(qtyInput.value || 0);
+    const b = Number(buyInput.value || 0);
+    const s = Number(sellInput.value || 0);
+    tr.querySelector('.sumBuy').textContent = formatNumber(b * q);
+    tr.querySelector('.sumSell').textContent = formatNumber(s * q);
+    updateTotals();
+  }
+  qtyInput.addEventListener('input', onChange);
+  buyInput.addEventListener('input', onChange);
+  sellInput.addEventListener('input', onChange);
+  nameInput.addEventListener('input', onChange); // عشان التحديث التلقائي للإجماليات
+  tr.querySelector('.remove-btn').addEventListener('click', ()=>{ tr.remove(); renumber(); updateTotals(); updateColumnVisibility(); });
+
+  tbody.appendChild(tr);
+  invoiceCounter++;
+  renumber();
+  updateTotals();
+  updateColumnVisibility(); // تحديث الإظهار/الإخفاء للصفوف الجديدة
+  document.getElementById('itemsCount').textContent = tbody.querySelectorAll('tr').length;
+}
+
+function updateRowTotals(tr){
+  const q = Number(tr.querySelector('.qty-input').value || 0);
+  
+  // قراءة السعر دائماً من حقل الإدخال
+  const buy = Number(tr.querySelector('.buy input').value || 0);
+  const sell = Number(tr.querySelector('.sell input').value || 0);
+  
+  tr.querySelector('.sumBuy').textContent = formatNumber(buy * q);
+  tr.querySelector('.sumSell').textContent = formatNumber(sell * q);
+}
+
+function renumber(){
+  let i=1;
+  tbody.querySelectorAll('tr').forEach(r => { r.querySelector('.idx').textContent = i; i++; });
+  document.getElementById('itemsCount').textContent = tbody.querySelectorAll('tr').length;
+}
+
+function updateTotals(){
+  let totalQty=0, totalBuy=0, totalSell=0, grandBuy=0, grandSell=0;
+  tbody.querySelectorAll('tr').forEach(tr=>{
+    const q = Number(tr.querySelector('.qty-input').value || 0);
+    
+    // قيم الشراء والبيع الفردية - تقرأ الآن من حقل الإدخال
+    const buy = Number(tr.querySelector('.buy input').value || 0);
+    const sell = Number(tr.querySelector('.sell input').value || 0);
+
+    // المجموع شراء والمجموع بيع (لقيم العرض في تذييل الجدول)
+    const sumBuy = Number(tr.querySelector('.sumBuy').textContent.replace(/,/g, '') || 0);
+    const sumSell = Number(tr.querySelector('.sumSell').textContent.replace(/,/g, '') || 0);
+
+    totalQty += q;
+    // يجب جمع الإجمالي للبنود
+    grandBuy += sumBuy;
+    grandSell += sumSell;
+
+    // للحقول التي تعرض السعر الفردي (Total Buy/Sell)
+    totalBuy += buy;
+    totalSell += sell;
+  });
+  
+  // تحديث القيم في الـ tfoot
+  document.getElementById('totalQty').textContent = formatNumber(totalQty);
+  document.getElementById('totalBuy').textContent = formatNumber(totalBuy); 
+  document.getElementById('totalSell').textContent = formatNumber(totalSell); 
+  document.getElementById('grandBuy').textContent = formatNumber(grandBuy);
+  document.getElementById('grandSell').textContent = formatNumber(grandSell);
+
+  // تحديث القيم في شريط الإجماليات المنفصل
+  document.getElementById('displayGrandBuy').textContent = formatNumber(grandBuy);
+  document.getElementById('displayGrandSell').textContent = formatNumber(grandSell);
+}
+
+
+function formatNumber(n){
+  return Number(n || 0).toLocaleString('en-US', {maximumFractionDigits:2});
+}
+
+function escapeHtml(s){
+  if(s===null||s===undefined) return '';
+  return String(s).replace(/[&<>"']/g, (m)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]);
+}
+
+// ------------------------------------------------------------------
+// Column Visibility Logic
+// ------------------------------------------------------------------
+
+const columnSelect = document.getElementById('columnSelect');
+const toggleColumnBtn = document.getElementById('toggleColumnBtn');
+let columnVisibility = {};
+
+function setupColumnToggle(){
+    columnSelect.innerHTML = '';
+    columnHeaders.forEach(col => {
+        // الإخفاء/الإظهار متاح لجميع الأعمدة ما عدا "م" و "إجراءات" (لأنها ضرورية للإدارة)
+        if (col.key !== 'idx' && col.key !== 'actions') {
+            const option = document.createElement('option');
+            option.value = col.key;
+            option.textContent = col.text;
+            columnSelect.appendChild(option);
+            columnVisibility[col.key] = true; // الكل مرئي مبدئيًا
+        }
+    });
+}
+
+function updateColumnVisibility(){
+    const table = document.getElementById('invoiceTable');
+    
+    // Iterate over all columns
+    columnHeaders.forEach(col => {
+        const isVisible = columnVisibility[col.key] === undefined ? true : columnVisibility[col.key];
+
+        // 1. Update Thead (Header) visibility
+        const th = table.querySelector(`th[data-col="${col.key}"]`);
+        if(th) th.classList.toggle('hidden', !isVisible);
+
+        // 2. Update Tbody (Data Rows) visibility
+        table.querySelectorAll(`tbody tr`).forEach(row => {
+            const td = row.querySelector(`td[data-col="${col.key}"]`);
+            if (td) td.classList.toggle('hidden', !isVisible);
+        });
+
+        // 3. Update Tfoot (Totals Row) visibility
+        const tfootRow = document.querySelector('.totals-row');
+        if (tfootRow) {
+            const firstTd = tfootRow.querySelector('.grand-total-label');
+            
+            const buyTotalTd = tfootRow.querySelector('#totalBuy');
+            const sumBuyTotalTd = tfootRow.querySelector('#grandBuy');
+            
+            if (buyTotalTd) buyTotalTd.classList.toggle('hidden', !columnVisibility['buy']);
+            if (sumBuyTotalTd) sumBuyTotalTd.classList.toggle('hidden', !columnVisibility['sumBuy']);
+            
+            // تحديث colspan
+            let visibleBeforeQty = 0;
+            // تم تعديل حلقة التكرار لتشمل الأعمدة قبل "الكمية" (م، كود، اسم)
+            columnHeaders.slice(0, 3).forEach(c => { 
+                if (columnVisibility[c.key] === undefined || columnVisibility[c.key]) {
+                    visibleBeforeQty++;
+                }
+            });
+            if(firstTd) firstTd.setAttribute('colspan', visibleBeforeQty);
+        }
+    });
+}
+
+toggleColumnBtn.addEventListener('click', ()=>{
+    const selectedKey = columnSelect.value;
+    if(selectedKey){
+        columnVisibility[selectedKey] = !columnVisibility[selectedKey];
+        updateColumnVisibility();
+    }
+});
+
+// Event listener for toggling Buy columns
+document.getElementById('toggleBuyColumnsBtn').addEventListener('click', ()=>{
+    const isVisible = columnVisibility['buy'];
+    columnVisibility['buy'] = !isVisible;
+    columnVisibility['sumBuy'] = !isVisible;
+    updateColumnVisibility();
+});
+
+// Toggle Stamp Button Logic
+const companyStamp = document.getElementById('companyStamp');
+document.getElementById('toggleStampBtn').addEventListener('click', () => {
+    companyStamp.classList.toggle('hidden');
+});
+// ------------------------------------------------------------------
+
+// NEW: Dynamic Title Logic
+function updateInvoiceTitle() {
+    if (invoiceTypeSelect && mainTitle) {
+        const selectedText = invoiceTypeSelect.options[invoiceTypeSelect.selectedIndex].text;
+        
+        mainTitle.textContent = selectedText;
+        document.title = selectedText; // Update tab title as well
+    }
+}
+if (invoiceTypeSelect) {
+    invoiceTypeSelect.addEventListener('change', updateInvoiceTitle);
+}
+// ------------------------------------------------------------------
+
+
+// Dynamic File Naming Function
+function getFileName(ext) {
+    const invoiceNum = document.getElementById('invoiceNumberInput').value.trim();
+    const clientName = document.getElementById('clientNameInput').value.trim();
+    const date = new Date().toISOString().slice(0, 10);
+    
+    // تنظيف السلسلة النصية لضمان عملها كاسم ملف (إزالة الأحرف الخاصة والمسافات)
+    const sanitize = (str) => {
+        // استبدال المسافات بالشرطات، وإزالة ما عدا الأبجدية الرقمية والعربية
+        // يتضمن نطاقات الحروف العربية الرئيسية: \u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF
+        return str.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF-]/g, '');
+    };
+    
+    let baseName = "فاتورة"; // Default base name
+    
+    // 1. Priority: Invoice Number
+    if (invoiceNum) {
+        baseName = `فاتورة-${sanitize(invoiceNum)}`;
+    // 2. Priority: Client Name
+    } else if (clientName) {
+        baseName = `عميل-${sanitize(clientName)}`;
+    // 3. Fallback: Date
+    } else {
+        baseName = `فاتورة-${date}`;
+    }
+    
+    return `${baseName}${ext}`;
+}
+
+
+// download functions
+document.getElementById('downloadImg').addEventListener('click', ()=>{
+  const area = document.querySelector('.wrap');
+  // العناصر المطلوب إخفاؤها مؤقتًا أثناء الالتقاط
+  const elementsToHide = [
+    document.querySelector('.controls'),
+    document.querySelector('.totals-bar')
+  ];
+  // عمود الإجراءات (الرأس والخلايا)
+  const actionsColumn = document.querySelectorAll('[data-col="actions"]');
+
+  // الإخفاء المؤقت
+  elementsToHide.forEach(el => el.classList.add('hide-on-capture'));
+  actionsColumn.forEach(el => el.classList.add('hide-on-capture')); 
+
+  // **المفتاح: استخدام useCORS: true للمساعدة في تحميل اللوجو والختم**
+  html2canvas(area, {scale:2, useCORS: true}).then(canvas=>{ 
+    // إعادة الإظهار
+    elementsToHide.forEach(el => el.classList.remove('hide-on-capture'));
+    actionsColumn.forEach(el => el.classList.remove('hide-on-capture')); 
+
+    const link = document.createElement('a');
+    // استخدام الدالة الجديدة لتحديد اسم الملف
+    link.download = getFileName('.png');
+    link.href = canvas.toDataURL();
+    link.click();
+  });
+});
+
+document.getElementById('downloadPdf').addEventListener('click', async ()=>{
+  const { jsPDF } = window.jspdf;
+  const area = document.querySelector('.wrap');
+  // العناصر المطلوب إخفاؤها مؤقتًا أثناء الالتقاط
+  const elementsToHide = [
+    document.querySelector('.controls'),
+    document.querySelector('.totals-bar')
+  ];
+  // عمود الإجراءات (الرأس والخلايا)
+  const actionsColumn = document.querySelectorAll('[data-col="actions"]');
+
+  // الإخفاء المؤقت
+  elementsToHide.forEach(el => el.classList.add('hide-on-capture'));
+  actionsColumn.forEach(el => el.classList.add('hide-on-capture'));
+
+  // **المفتاح: استخدام useCORS: true للمساعدة في تحميل اللوجو والختم**
+  const canvas = await html2canvas(area, {scale:2, useCORS: true}); 
+
+  // إعادة الإظهار
+  elementsToHide.forEach(el => el.classList.remove('hide-on-capture'));
+  actionsColumn.forEach(el => el.classList.remove('hide-on-capture'));
+
+  const imgData = canvas.toDataURL('image/png');
+  const pdf = new jsPDF('l','mm','a4'); // landscape A4
+  const pdfWidth = pdf.internal.pageSize.getWidth();
+  const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+  pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+  // استخدام الدالة الجديدة لتحديد اسم الملف
+  pdf.save(getFileName('.pdf'));
+});
+
+// UI buttons
+document.getElementById('addManual').addEventListener('click', ()=>addManualRow());
+document.getElementById('clearInvoice').addEventListener('click', ()=>{ 
+    tbody.innerHTML=''; 
+    invoiceCounter=1; 
+    updateTotals(); 
+    renumber(); 
+    updateColumnVisibility(); // تحديث الإظهار/الإخفاء بعد المسح
+});
+
+// Initial setup
+window.addEventListener('load', ()=>{
+  // تحميل ملف الإكسيل التلقائي
+  loadExcel(EXCEL_FILENAME);
+  // إعداد قائمة الأعمدة
+  setupColumnToggle();
+
+  // Initial title setup (to ensure doc title is set correctly)
+  updateInvoiceTitle(); 
+
+  // إعداد التاريخ - أصبح قابلاً للتعديل الآن
+  const dateInput = document.getElementById('invoiceDateInput');
+  const today = new Date();
+  const formattedDate = today.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+  dateInput.value = formattedDate;
+
+  // تطبيق الإخفاء المبدئي
+  updateColumnVisibility();
+});
+
+// close suggestions if click outside
+document.addEventListener('click', (e)=>{
+  if(!document.querySelector('.suggestions').contains(e.target)){
+    suggestList.style.display='none';
+  }
+});
+
+</script>
+</body>
+</html>
